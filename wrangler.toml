@@ -6,6 +6,8 @@ compatibility_date = "2026-05-09"
 HN_ORIGIN = "https://news.ycombinator.com"
 HN_API_ORIGIN = "https://hacker-news.firebaseio.com"
 JWT_TTL_SECONDS = "2592000"
+LOGIN_RATE_LIMIT_MAX = "10"
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = "300"
 ALLOWED_ORIGINS = "*"
 
 [[kv_namespaces]]

@@ -9,7 +9,8 @@ import {
   responseHeadersForClient,
   safeHnPath,
 } from "./hn";
-import { createSession, deleteSession, readSession } from "./session";
+import { checkLoginRateLimit } from "./rate-limit";
+import { ConfigurationError, createSession, deleteSession, readSession } from "./session";
 import type { Env } from "./types";
 
 const ErrorSchema = z
@@ -110,6 +111,8 @@ const loginRoute = createRoute({
     },
     400: JsonErrorResponse,
     401: JsonErrorResponse,
+    429: JsonErrorResponse,
+    500: JsonErrorResponse,
   },
 });
 
@@ -129,6 +132,7 @@ const meRoute = createRoute({
       },
     },
     401: JsonErrorResponse,
+    500: JsonErrorResponse,
   },
 });
 
@@ -148,6 +152,7 @@ const logoutRoute = createRoute({
       },
     },
     401: JsonErrorResponse,
+    500: JsonErrorResponse,
   },
 });
 
@@ -209,6 +214,13 @@ app.openapi(loginRoute, async (c) => {
   const { username, password } = credentials;
 
   try {
+    const rateLimit = await checkLoginRateLimit(c.env, c.req.raw);
+    if (!rateLimit.allowed) {
+      return c.json({ error: "Too many login attempts" }, 429, {
+        "Retry-After": rateLimit.retryAfter.toString(),
+      });
+    }
+
     const hn = await loginToHackerNews(username, password, c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
     const session = await createSession(c.env, hn.username, hn.hnCookie);
 
@@ -222,6 +234,10 @@ app.openapi(loginRoute, async (c) => {
       200,
     );
   } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
     return c.json({ error: error instanceof Error ? error.message : "Login failed" }, 401);
   }
 });
@@ -236,7 +252,11 @@ app.openapi(meRoute, async (c) => {
       },
       200,
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
     return c.json({ error: "Unauthorized" }, 401);
   }
 });
@@ -246,7 +266,11 @@ app.openapi(logoutRoute, async (c) => {
     const { payload } = await readSession(c.env, c.req.raw);
     await deleteSession(c.env, payload.sid);
     return c.json({ ok: true }, 200);
-  } catch {
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
     return c.json({ error: "Unauthorized" }, 401);
   }
 });

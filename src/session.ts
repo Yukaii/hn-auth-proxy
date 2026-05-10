@@ -3,6 +3,10 @@ import { signJwt, verifyJwt } from "./jwt";
 
 const SESSION_PREFIX = "session:";
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 30;
+const MIN_JWT_SECRET_BYTES = 32;
+const encoder = new TextEncoder();
+
+export class ConfigurationError extends Error {}
 
 export function jwtTtlSeconds(env: Env): number {
   const value = Number(env.JWT_TTL_SECONDS);
@@ -11,6 +15,15 @@ export function jwtTtlSeconds(env: Env): number {
 
 export function newSessionId(): string {
   return crypto.randomUUID();
+}
+
+export function jwtSecret(env: Env): string {
+  const secret = env.JWT_SECRET;
+  if (!secret || encoder.encode(secret).byteLength < MIN_JWT_SECRET_BYTES) {
+    throw new ConfigurationError(`JWT_SECRET must be at least ${MIN_JWT_SECRET_BYTES} bytes`);
+  }
+
+  return secret;
 }
 
 export async function createSession(
@@ -29,7 +42,7 @@ export async function createSession(
   });
 
   const payload: JwtPayload = { sub: username, sid, iat: now, exp: expiresAt };
-  const token = await signJwt(payload, env.JWT_SECRET);
+  const token = await signJwt(payload, jwtSecret(env));
 
   return { token, sid, expiresAt };
 }
@@ -50,7 +63,7 @@ export async function readSession(
     throw new Error("Missing bearer token");
   }
 
-  const payload = await verifyJwt(token, env.JWT_SECRET);
+  const payload = await verifyJwt(token, jwtSecret(env));
   const rawSession = await env.HN_SESSIONS.get(`${SESSION_PREFIX}${payload.sid}`);
   if (!rawSession) {
     throw new Error("Session not found");

@@ -69,7 +69,20 @@ export function safeHnPath(path: string): string {
     throw new Error("Invalid Hacker News path");
   }
 
-  if (normalized === "login" || normalized === "logout") {
+  const pathname = normalized.split(/[?#]/, 1)[0] ?? "";
+  const segments = pathname.split("/").map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      throw new Error("Invalid Hacker News path");
+    }
+  });
+
+  if (
+    segments.some((segment) => segment === "." || segment === "..") ||
+    segments[0] === "login" ||
+    segments[0] === "logout"
+  ) {
     throw new Error("Use the proxy auth endpoints for login and logout");
   }
 

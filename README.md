@@ -17,24 +17,27 @@ The Worker logs in to Hacker News with the normal `acct` / `pw` form flow, store
 ## Local Setup
 
 ```sh
-npm install
+pnpm install
 cp .dev.vars.example .dev.vars
-npm run dev
+pnpm dev
 ```
 
 Set `JWT_SECRET` in `.dev.vars` to a long random value.
 
+Login attempts are rate-limited per client IP using `LOGIN_RATE_LIMIT_MAX` and
+`LOGIN_RATE_LIMIT_WINDOW_SECONDS` from `wrangler.toml`.
+
 ## Checks
 
 ```sh
-npm run format
-npm run lint
-npm run typecheck
-npm test
-npm run check
+pnpm format
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm check
 ```
 
-The project uses Oxlint and Oxfmt. `npm run check` runs formatting checks, linting, TypeScript, and tests.
+The project uses Oxlint and Oxfmt. `pnpm check` runs formatting checks, linting, TypeScript, and tests.
 
 ## OpenAPI
 
@@ -52,7 +55,7 @@ cp test/.env.hn.example test/.env.hn
 Fill in `HN_USERNAME` and `HN_PASSWORD`, then run:
 
 ```sh
-npm test
+pnpm test
 ```
 
 `test/.env.hn` is ignored by git.
@@ -62,15 +65,15 @@ npm test
 Create a KV namespace:
 
 ```sh
-npx wrangler kv namespace create HN_SESSIONS
-npx wrangler kv namespace create HN_SESSIONS --preview
+pnpm exec wrangler kv namespace create HN_SESSIONS
+pnpm exec wrangler kv namespace create HN_SESSIONS --preview
 ```
 
 Put the returned ids in `wrangler.toml`, then set the production JWT secret:
 
 ```sh
-npx wrangler secret put JWT_SECRET
-npm run deploy
+pnpm exec wrangler secret put JWT_SECRET
+pnpm deploy
 ```
 
 ## Notes
