@@ -12,7 +12,7 @@ import {
 import { checkLoginRateLimit } from "./rate-limit";
 import { ConfigurationError, createSession, deleteSession, readSession } from "./session";
 import type { Env } from "./types";
-import { parseUpvotedPage } from "./upvoted";
+import { parseCommentPage, parseSubmissionPage } from "./hn-pages";
 
 const ErrorSchema = z
   .object({
@@ -58,7 +58,7 @@ const MeResponseSchema = z
   })
   .openapi("MeResponse");
 
-const UpvotedItemSchema = z
+const SubmissionItemSchema = z
   .object({
     id: z.number().int(),
     rank: z.number().int().nullable(),
@@ -72,17 +72,48 @@ const UpvotedItemSchema = z
     comments: z.number().int().nullable(),
     itemUrl: z.string(),
   })
-  .openapi("UpvotedItem");
+  .openapi("SubmissionItem");
 
-const UpvotedResponseSchema = z
+const SubmissionListResponseSchema = z
   .object({
     user: z.string(),
     page: z.number().int(),
-    items: z.array(UpvotedItemSchema),
+    items: z.array(SubmissionItemSchema),
     nextPage: z.number().int().nullable(),
     nextUrl: z.string().nullable(),
   })
-  .openapi("UpvotedResponse");
+  .openapi("SubmissionListResponse");
+
+const CommentItemSchema = z
+  .object({
+    id: z.number().int(),
+    by: z.string().nullable(),
+    age: z.string().nullable(),
+    time: z.number().int().nullable(),
+    text: z.string(),
+    textHtml: z.string(),
+    parentUrl: z.string().nullable(),
+    contextUrl: z.string().nullable(),
+    itemUrl: z.string(),
+    story: z
+      .object({
+        id: z.number().int().nullable(),
+        title: z.string().nullable(),
+        url: z.string().nullable(),
+      })
+      .nullable(),
+  })
+  .openapi("CommentItem");
+
+const CommentListResponseSchema = z
+  .object({
+    user: z.string(),
+    page: z.number().int(),
+    items: z.array(CommentItemSchema),
+    nextPage: z.number().int().nullable(),
+    nextUrl: z.string().nullable(),
+  })
+  .openapi("CommentListResponse");
 
 const JsonErrorResponse = {
   description: "Error response",
@@ -187,10 +218,14 @@ const upvotedRoute = createRoute({
   method: "get",
   path: "/auth/upvoted",
   tags: ["Auth"],
-  summary: "Read the current user's upvoted Hacker News submissions",
+  summary: "Read the current user's upvoted Hacker News submissions or comments",
   security: BearerSecurity,
   request: {
     query: z.object({
+      type: z.enum(["submissions", "comments"]).optional().openapi({
+        description: "Which upvoted list to return.",
+        example: "submissions",
+      }),
       page: z.coerce.number().int().min(1).optional().openapi({
         description: "HN upvoted page number.",
         example: 1,
@@ -199,10 +234,98 @@ const upvotedRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Parsed upvoted submissions",
+      description: "Parsed upvoted submissions or comments",
       content: {
         "application/json": {
-          schema: UpvotedResponseSchema,
+          schema: z.union([SubmissionListResponseSchema, CommentListResponseSchema]),
+        },
+      },
+    },
+    401: JsonErrorResponse,
+    500: JsonErrorResponse,
+  },
+});
+
+const submissionsRoute = createRoute({
+  method: "get",
+  path: "/auth/submissions",
+  tags: ["Auth"],
+  summary: "Read the current user's submitted Hacker News stories",
+  security: BearerSecurity,
+  request: {
+    query: z.object({
+      page: z.coerce.number().int().min(1).optional().openapi({
+        description: "HN submitted page number.",
+        example: 1,
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Parsed submitted stories",
+      content: {
+        "application/json": {
+          schema: SubmissionListResponseSchema,
+        },
+      },
+    },
+    401: JsonErrorResponse,
+    500: JsonErrorResponse,
+  },
+});
+
+const commentsRoute = createRoute({
+  method: "get",
+  path: "/auth/comments",
+  tags: ["Auth"],
+  summary: "Read the current user's Hacker News comments page",
+  security: BearerSecurity,
+  request: {
+    query: z.object({
+      page: z.coerce.number().int().min(1).optional().openapi({
+        description: "HN threads page number.",
+        example: 1,
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Parsed comments from HN threads",
+      content: {
+        "application/json": {
+          schema: CommentListResponseSchema,
+        },
+      },
+    },
+    401: JsonErrorResponse,
+    500: JsonErrorResponse,
+  },
+});
+
+const favoritesRoute = createRoute({
+  method: "get",
+  path: "/auth/favorites",
+  tags: ["Auth"],
+  summary: "Read the current user's favorite Hacker News submissions or comments",
+  security: BearerSecurity,
+  request: {
+    query: z.object({
+      type: z.enum(["submissions", "comments"]).optional().openapi({
+        description: "Which favorites list to return.",
+        example: "submissions",
+      }),
+      page: z.coerce.number().int().min(1).optional().openapi({
+        description: "HN favorites page number.",
+        example: 1,
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Parsed favorite submissions or comments",
+      content: {
+        "application/json": {
+          schema: z.union([SubmissionListResponseSchema, CommentListResponseSchema]),
         },
       },
     },
@@ -332,10 +455,45 @@ app.openapi(logoutRoute, async (c) => {
 
 app.openapi(upvotedRoute, async (c) => {
   const page = c.req.valid("query").page ?? 1;
+  const type = c.req.valid("query").type ?? "submissions";
 
   try {
     const { session } = await readSession(c.env, c.req.raw);
     const upstream = new URL("/upvoted", c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
+    upstream.searchParams.set("id", session.username);
+    if (type === "comments") upstream.searchParams.set("comments", "t");
+    if (page > 1) upstream.searchParams.set("p", page.toString());
+
+    const response = await fetch(upstream, {
+      headers: headersForHnProxy(c.req.raw, session),
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      return c.json({ error: `Hacker News returned status ${response.status}` }, 500);
+    }
+
+    const html = await response.text();
+    return c.json(
+      type === "comments"
+        ? parseCommentPage(html, session.username, page, "upvoted")
+        : parseSubmissionPage(html, session.username, page, "upvoted"),
+      200,
+    );
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+});
+
+app.openapi(submissionsRoute, async (c) => {
+  const page = c.req.valid("query").page ?? 1;
+
+  try {
+    const { session } = await readSession(c.env, c.req.raw);
+    const upstream = new URL("/submitted", c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
     upstream.searchParams.set("id", session.username);
     if (page > 1) upstream.searchParams.set("p", page.toString());
 
@@ -347,7 +505,72 @@ app.openapi(upvotedRoute, async (c) => {
       return c.json({ error: `Hacker News returned status ${response.status}` }, 500);
     }
 
-    return c.json(parseUpvotedPage(await response.text(), session.username, page), 200);
+    return c.json(
+      parseSubmissionPage(await response.text(), session.username, page, "submitted"),
+      200,
+    );
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+});
+
+app.openapi(commentsRoute, async (c) => {
+  const page = c.req.valid("query").page ?? 1;
+
+  try {
+    const { session } = await readSession(c.env, c.req.raw);
+    const upstream = new URL("/threads", c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
+    upstream.searchParams.set("id", session.username);
+    if (page > 1) upstream.searchParams.set("p", page.toString());
+
+    const response = await fetch(upstream, {
+      headers: headersForHnProxy(c.req.raw, session),
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      return c.json({ error: `Hacker News returned status ${response.status}` }, 500);
+    }
+
+    return c.json(parseCommentPage(await response.text(), session.username, page, "threads"), 200);
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+});
+
+app.openapi(favoritesRoute, async (c) => {
+  const page = c.req.valid("query").page ?? 1;
+  const type = c.req.valid("query").type ?? "submissions";
+
+  try {
+    const { session } = await readSession(c.env, c.req.raw);
+    const upstream = new URL("/favorites", c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
+    upstream.searchParams.set("id", session.username);
+    if (type === "comments") upstream.searchParams.set("comments", "t");
+    if (page > 1) upstream.searchParams.set("p", page.toString());
+
+    const response = await fetch(upstream, {
+      headers: headersForHnProxy(c.req.raw, session),
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      return c.json({ error: `Hacker News returned status ${response.status}` }, 500);
+    }
+
+    const html = await response.text();
+    return c.json(
+      type === "comments"
+        ? parseCommentPage(html, session.username, page, "favorites")
+        : parseSubmissionPage(html, session.username, page, "favorites"),
+      200,
+    );
   } catch (error) {
     if (error instanceof ConfigurationError) {
       return c.json({ error: "Server authentication is not configured" }, 500);

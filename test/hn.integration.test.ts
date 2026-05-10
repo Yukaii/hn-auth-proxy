@@ -148,4 +148,45 @@ describeWithCredentials("Hacker News integration", () => {
     expect(body.items?.[0]?.title).toEqual(expect.any(String));
     expect(body.items?.[0]?.itemUrl).toMatch(/^item\?id=\d+$/);
   }, 30_000);
+
+  it("returns parsed submissions, comments, upvoted comments, and favorites", async () => {
+    const testEnv = testBindings();
+    const token = await login(testEnv);
+    const headers = { authorization: `Bearer ${token}` };
+    const paths = [
+      "/auth/submissions?page=1",
+      "/auth/comments?page=1",
+      "/auth/upvoted?type=comments&page=1",
+      "/auth/favorites?type=submissions&page=1",
+      "/auth/favorites?type=comments&page=1",
+    ];
+
+    const results = await Promise.all(
+      paths.map(async (path) => {
+        const response = await app.fetch(
+          new Request(`https://worker.test${path}`, { headers }),
+          testEnv,
+        );
+        return {
+          response,
+          body: (await response.json()) as {
+            user?: string;
+            page?: number;
+            items?: unknown[];
+            nextPage?: number | null;
+            nextUrl?: string | null;
+          },
+        };
+      }),
+    );
+
+    for (const { response, body } of results) {
+      expect(response.status).toBe(200);
+      expect(body.user).toBe(env.HN_USERNAME);
+      expect(body.page).toBe(1);
+      expect(Array.isArray(body.items)).toBe(true);
+      expect(body.nextPage === null || typeof body.nextPage === "number").toBe(true);
+      expect(body.nextUrl === null || typeof body.nextUrl === "string").toBe(true);
+    }
+  }, 30_000);
 });

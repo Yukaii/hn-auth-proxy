@@ -10,7 +10,10 @@ The Worker logs in to Hacker News with the normal `acct` / `pw` form flow, store
 - `GET /openapi.json` serves the generated OpenAPI 3.1 document.
 - `POST /auth/login` with `{ "username": "...", "password": "..." }` returns a bearer JWT.
 - `GET /auth/me` returns the current JWT-backed session.
-- `GET /auth/upvoted` returns the current user's upvoted HN submissions as parsed JSON.
+- `GET /auth/submissions` returns the current user's submitted HN stories as parsed JSON.
+- `GET /auth/comments` returns the current user's HN comments page as parsed JSON.
+- `GET /auth/upvoted?type=submissions|comments` returns the current user's upvoted HN submissions or comments as parsed JSON.
+- `GET /auth/favorites?type=submissions|comments` returns the current user's favorite HN submissions or comments as parsed JSON.
 - `POST /auth/logout` deletes the server-side HN session.
 - `GET /v0/*` proxies the official Firebase Hacker News API.
 - `/hn/*` proxies `news.ycombinator.com/*` with the stored HN cookie injected. Send `Authorization: Bearer <token>`.
@@ -98,16 +101,40 @@ reply?id=<comment-id>&goto=item%3Fid%3D<story-id>%23<comment-id>
 
 The reply page returns HN's normal comment form, including hidden `parent`, `goto`, `hmac`, and a `textarea`. Creating posts and deleting comments are intentionally not supported/documented yet.
 
-### Upvoted submissions
+### Parsed account lists
 
-The typed endpoint for the current user's upvoted submissions is:
+The API exposes typed JSON wrappers around HN's logged-in account pages:
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://hn-api.yukai.dev/auth/upvoted?page=2"
+  "https://hn-api.yukai.dev/auth/submissions?page=1"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/comments?page=1"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/upvoted?type=submissions&page=2"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/upvoted?type=comments&page=2"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/favorites?type=submissions&page=1"
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/favorites?type=comments&page=1"
 ```
 
-It wraps HN's logged-in `upvoted?id=<username>&p=<page>` page and returns parsed JSON:
+These wrap HN's pages:
+
+- `submitted?id=<username>&p=<page>`
+- `threads?id=<username>&p=<page>`
+- `upvoted?id=<username>&p=<page>`
+- `upvoted?id=<username>&comments=t&p=<page>`
+- `favorites?id=<username>&p=<page>`
+- `favorites?id=<username>&comments=t&p=<page>`
+
+Submission-list responses look like:
 
 ```json
 {
@@ -130,6 +157,35 @@ It wraps HN's logged-in `upvoted?id=<username>&p=<page>` page and returns parsed
   ],
   "nextPage": 3,
   "nextUrl": "upvoted?id=pg&p=3"
+}
+```
+
+Comment-list responses look like:
+
+```json
+{
+  "user": "pg",
+  "page": 1,
+  "items": [
+    {
+      "id": 37023160,
+      "by": "jph",
+      "age": "on Aug 6, 2023",
+      "time": 1691336757,
+      "text": "How to add a date to HN title?",
+      "textHtml": "How to add a date to HN title?",
+      "parentUrl": "item?id=37022911",
+      "contextUrl": "item?id=37022911#37023160",
+      "itemUrl": "item?id=37023160",
+      "story": {
+        "id": 37022911,
+        "title": "I went to 50 different dentists",
+        "url": "item?id=37022911"
+      }
+    }
+  ],
+  "nextPage": 2,
+  "nextUrl": "upvoted?id=pg&comments=t&p=2"
 }
 ```
 
