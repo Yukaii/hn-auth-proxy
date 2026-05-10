@@ -1,0 +1,14 @@
+name = "hn-auth-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-05-09"
+
+[vars]
+HN_ORIGIN = "https://news.ycombinator.com"
+HN_API_ORIGIN = "https://hacker-news.firebaseio.com"
+JWT_TTL_SECONDS = "2592000"
+ALLOWED_ORIGINS = "*"
+
+[[kv_namespaces]]
+binding = "HN_SESSIONS"
+id = "replace-with-production-kv-id"
+preview_id = "replace-with-preview-kv-id"
