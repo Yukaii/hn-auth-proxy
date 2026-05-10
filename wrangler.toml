@@ -1,9 +1,7 @@
 name = "hn-auth-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-05-09"
-routes = [
-  { pattern = "hn-api.yukai.dev", custom_domain = true }
-]
+routes = [{ pattern = "hn-api.yukai.dev", custom_domain = true }]
 
 [vars]
 HN_ORIGIN = "https://news.ycombinator.com"
