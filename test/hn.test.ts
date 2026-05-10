@@ -14,12 +14,14 @@ describe("HN helpers", () => {
   });
 
   it("extracts only the cookie pair", () => {
-    expect(extractCookieValue(["user=alice%26hash; Path=/; HttpOnly"], "user")).toBe("user=alice%26hash");
+    expect(extractCookieValue(["user=alice%26hash; Path=/; HttpOnly"], "user")).toBe(
+      "user=alice%26hash",
+    );
   });
 
   it("rejects unsafe proxy paths", () => {
-    expect(() => safeHnPath("https://example.com")).toThrow();
-    expect(() => safeHnPath("login")).toThrow();
+    expect(() => safeHnPath("https://example.com")).toThrow("Invalid Hacker News path");
+    expect(() => safeHnPath("login")).toThrow("Use the proxy auth endpoints");
     expect(safeHnPath("/item?id=1")).toBe("item?id=1");
   });
 });

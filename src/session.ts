@@ -24,7 +24,9 @@ export async function createSession(
   const expiresAt = now + ttl;
   const record: SessionRecord = { username, hnCookie, createdAt: now, expiresAt };
 
-  await env.HN_SESSIONS.put(`${SESSION_PREFIX}${sid}`, JSON.stringify(record), { expirationTtl: ttl });
+  await env.HN_SESSIONS.put(`${SESSION_PREFIX}${sid}`, JSON.stringify(record), {
+    expirationTtl: ttl,
+  });
 
   const payload: JwtPayload = { sub: username, sid, iat: now, exp: expiresAt };
   const token = await signJwt(payload, env.JWT_SECRET);
@@ -39,7 +41,10 @@ export function bearerToken(request: Request): string | null {
   return match?.[1] ?? null;
 }
 
-export async function readSession(env: Env, request: Request): Promise<{ payload: JwtPayload; session: SessionRecord }> {
+export async function readSession(
+  env: Env,
+  request: Request,
+): Promise<{ payload: JwtPayload; session: SessionRecord }> {
   const token = bearerToken(request);
   if (!token) {
     throw new Error("Missing bearer token");
