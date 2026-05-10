@@ -1,6 +1,9 @@
 name = "hn-auth-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-05-09"
+routes = [
+  { pattern = "hn-api.yukai.dev", custom_domain = true }
+]
 
 [vars]
 HN_ORIGIN = "https://news.ycombinator.com"
@@ -8,9 +11,9 @@ HN_API_ORIGIN = "https://hacker-news.firebaseio.com"
 JWT_TTL_SECONDS = "2592000"
 LOGIN_RATE_LIMIT_MAX = "10"
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = "300"
-ALLOWED_ORIGINS = "*"
+ALLOWED_ORIGINS = "https://hn.yukai.dev"
 
 [[kv_namespaces]]
 binding = "HN_SESSIONS"
-id = "replace-with-production-kv-id"
-preview_id = "replace-with-preview-kv-id"
+id = "6ef3981a351947b496204ac6c1f6f218"
+preview_id = "b1ba71925522403ebea1100db7b0447c"
