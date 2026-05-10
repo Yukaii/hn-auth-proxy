@@ -64,7 +64,7 @@ export async function checkLoginRateLimit(
 
   const next: RateLimitRecord = { count: current.count + 1, resetAt: current.resetAt };
   await env.HN_SESSIONS.put(key, JSON.stringify(next), {
-    expirationTtl: Math.max(1, next.resetAt - now),
+    expirationTtl: Math.max(60, next.resetAt - now),
   });
 
   return {

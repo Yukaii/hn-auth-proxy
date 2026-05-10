@@ -123,4 +123,29 @@ describeWithCredentials("Hacker News integration", () => {
     expect(replyHtml).toContain("<textarea");
     expect(replyHtml).toMatch(/<form[^>]+action="comment"[^>]+method="post"/);
   }, 30_000);
+
+  it("returns parsed upvoted submissions for the logged-in user", async () => {
+    const testEnv = testBindings();
+    const token = await login(testEnv);
+
+    const response = await app.fetch(
+      new Request("https://worker.test/auth/upvoted?page=1", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      testEnv,
+    );
+    const body = (await response.json()) as {
+      user?: string;
+      page?: number;
+      items?: Array<{ id: number; title: string; itemUrl: string }>;
+      nextPage?: number | null;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.user).toBe(env.HN_USERNAME);
+    expect(body.page).toBe(1);
+    expect(body.items?.[0]?.id).toEqual(expect.any(Number));
+    expect(body.items?.[0]?.title).toEqual(expect.any(String));
+    expect(body.items?.[0]?.itemUrl).toMatch(/^item\?id=\d+$/);
+  }, 30_000);
 });

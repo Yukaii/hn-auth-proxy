@@ -12,6 +12,7 @@ import {
 import { checkLoginRateLimit } from "./rate-limit";
 import { ConfigurationError, createSession, deleteSession, readSession } from "./session";
 import type { Env } from "./types";
+import { parseUpvotedPage } from "./upvoted";
 
 const ErrorSchema = z
   .object({
@@ -56,6 +57,32 @@ const MeResponseSchema = z
     }),
   })
   .openapi("MeResponse");
+
+const UpvotedItemSchema = z
+  .object({
+    id: z.number().int(),
+    rank: z.number().int().nullable(),
+    title: z.string(),
+    url: z.string(),
+    site: z.string().nullable(),
+    score: z.number().int().nullable(),
+    by: z.string().nullable(),
+    age: z.string().nullable(),
+    time: z.number().int().nullable(),
+    comments: z.number().int().nullable(),
+    itemUrl: z.string(),
+  })
+  .openapi("UpvotedItem");
+
+const UpvotedResponseSchema = z
+  .object({
+    user: z.string(),
+    page: z.number().int(),
+    items: z.array(UpvotedItemSchema),
+    nextPage: z.number().int().nullable(),
+    nextUrl: z.string().nullable(),
+  })
+  .openapi("UpvotedResponse");
 
 const JsonErrorResponse = {
   description: "Error response",
@@ -148,6 +175,34 @@ const logoutRoute = createRoute({
       content: {
         "application/json": {
           schema: OkSchema,
+        },
+      },
+    },
+    401: JsonErrorResponse,
+    500: JsonErrorResponse,
+  },
+});
+
+const upvotedRoute = createRoute({
+  method: "get",
+  path: "/auth/upvoted",
+  tags: ["Auth"],
+  summary: "Read the current user's upvoted Hacker News submissions",
+  security: BearerSecurity,
+  request: {
+    query: z.object({
+      page: z.coerce.number().int().min(1).optional().openapi({
+        description: "HN upvoted page number.",
+        example: 1,
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Parsed upvoted submissions",
+      content: {
+        "application/json": {
+          schema: UpvotedResponseSchema,
         },
       },
     },
@@ -266,6 +321,33 @@ app.openapi(logoutRoute, async (c) => {
     const { payload } = await readSession(c.env, c.req.raw);
     await deleteSession(c.env, payload.sid);
     return c.json({ ok: true }, 200);
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return c.json({ error: "Server authentication is not configured" }, 500);
+    }
+
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+});
+
+app.openapi(upvotedRoute, async (c) => {
+  const page = c.req.valid("query").page ?? 1;
+
+  try {
+    const { session } = await readSession(c.env, c.req.raw);
+    const upstream = new URL("/upvoted", c.env.HN_ORIGIN ?? DEFAULT_HN_ORIGIN);
+    upstream.searchParams.set("id", session.username);
+    if (page > 1) upstream.searchParams.set("p", page.toString());
+
+    const response = await fetch(upstream, {
+      headers: headersForHnProxy(c.req.raw, session),
+      redirect: "manual",
+    });
+    if (!response.ok) {
+      return c.json({ error: `Hacker News returned status ${response.status}` }, 500);
+    }
+
+    return c.json(parseUpvotedPage(await response.text(), session.username, page), 200);
   } catch (error) {
     if (error instanceof ConfigurationError) {
       return c.json({ error: "Server authentication is not configured" }, 500);

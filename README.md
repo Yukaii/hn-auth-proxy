@@ -10,6 +10,7 @@ The Worker logs in to Hacker News with the normal `acct` / `pw` form flow, store
 - `GET /openapi.json` serves the generated OpenAPI 3.1 document.
 - `POST /auth/login` with `{ "username": "...", "password": "..." }` returns a bearer JWT.
 - `GET /auth/me` returns the current JWT-backed session.
+- `GET /auth/upvoted` returns the current user's upvoted HN submissions as parsed JSON.
 - `POST /auth/logout` deletes the server-side HN session.
 - `GET /v0/*` proxies the official Firebase Hacker News API.
 - `/hn/*` proxies `news.ycombinator.com/*` with the stored HN cookie injected. Send `Authorization: Bearer <token>`.
@@ -96,6 +97,41 @@ reply?id=<comment-id>&goto=item%3Fid%3D<story-id>%23<comment-id>
 ```
 
 The reply page returns HN's normal comment form, including hidden `parent`, `goto`, `hmac`, and a `textarea`. Creating posts and deleting comments are intentionally not supported/documented yet.
+
+### Upvoted submissions
+
+The typed endpoint for the current user's upvoted submissions is:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://hn-api.yukai.dev/auth/upvoted?page=2"
+```
+
+It wraps HN's logged-in `upvoted?id=<username>&p=<page>` page and returns parsed JSON:
+
+```json
+{
+  "user": "pg",
+  "page": 2,
+  "items": [
+    {
+      "id": 37144985,
+      "rank": 1,
+      "title": "Htmx is part of the GitHub Accelerator",
+      "url": "https://htmx.org/posts/2023-06-06-htmx-github-accelerator/",
+      "site": "htmx.org",
+      "score": 1109,
+      "by": "jjdeveloper",
+      "age": "on Aug 16, 2023",
+      "time": 1692181172,
+      "comments": 487,
+      "itemUrl": "item?id=37144985"
+    }
+  ],
+  "nextPage": 3,
+  "nextUrl": "upvoted?id=pg&p=3"
+}
+```
 
 ## Real Hacker News Integration Test
 
