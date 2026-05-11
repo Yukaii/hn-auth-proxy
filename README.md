@@ -18,6 +18,10 @@ The Worker logs in to Hacker News with the normal `acct` / `pw` form flow, store
 - `GET /v0/*` proxies the official Firebase Hacker News API.
 - `/hn/*` proxies `news.ycombinator.com/*` with the stored HN cookie injected. Send `Authorization: Bearer <token>`.
 
+## Frontend
+
+The frontend project that consumes this API is [Yukaii/ykhn](https://github.com/Yukaii/ykhn).
+
 ## Local Setup
 
 ```sh
